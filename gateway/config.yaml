@@ -63,6 +63,7 @@ llm:
         model: $PRIMARY_MODEL
         baseUrl: $PRIMARY_BASE_URL # containerized ollama by default; point at
         # http://host.docker.internal:11434/v1 to ride the host's Metal GPU on a Mac
+        tokenize: true # request-time token estimation so budgets reject up front
       health:
         eviction:
           consecutiveFailures: 1
@@ -73,6 +74,7 @@ llm:
       params:
         model: $FALLBACK_MODEL
         baseUrl: $FALLBACK_BASE_URL
+        tokenize: true
       health:
         eviction:
           consecutiveFailures: 1
@@ -83,6 +85,7 @@ llm:
       params:
         model: mock-llm
         baseUrl: http://mock-llm:8200/v1
+        tokenize: true
       health:
         eviction:
           consecutiveFailures: 1
