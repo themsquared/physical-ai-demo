@@ -20,18 +20,16 @@ from common.otel import init_tracing
 
 PORT = int(os.environ.get("PORT", "9000"))
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:3000")
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:4b")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:4000/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "robot-brain")
 JWT_TOKEN = load_token("orchestrator")
 STEP_RETRIES = int(os.environ.get("STEP_RETRIES", "4"))
 RETRY_WAIT = float(os.environ.get("RETRY_WAIT", "3.0"))
 
 tracer = init_tracing("orchestrator")
 
-llm = AsyncOpenAI(
-    base_url=f"{GATEWAY_URL}/llm/v1",
-    api_key="not-needed-identity-is-jwt",
-    default_headers={"Authorization": f"Bearer {JWT_TOKEN}"},
-)
+# The JWT IS the api key: one identity for planning calls and telemetry reads.
+llm = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=JWT_TOKEN or "missing-token")
 
 AMR_ALTERNATE = {"amr-1": "amr-2", "amr-2": "amr-1"}
 
@@ -64,9 +62,16 @@ async def make_plan(mission: str) -> Plan:
     for attempt in range(3):
         with tracer.start_as_current_span("llm.mission_plan") as span:
             span.set_attribute("attempt", attempt)
-            resp = await llm.chat.completions.create(
-                model=LLM_MODEL, messages=messages, temperature=0.1
-            )
+            try:
+                resp = await llm.chat.completions.create(
+                    model=LLM_MODEL, messages=messages, temperature=0.1
+                )
+            except Exception as e:
+                # failover rung may be mid-eviction; the retry rides the next rung
+                last_err = e
+                span.set_attribute("error", str(e)[:200])
+                await asyncio.sleep(1.0)
+                continue
             raw = (resp.choices[0].message.content or "").strip()
             span.set_attribute("plan.raw", raw[:1000])
         try:

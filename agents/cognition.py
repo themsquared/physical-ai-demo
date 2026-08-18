@@ -26,18 +26,17 @@ AGENT_ID = f"{ROBOT_ID}-cognition"
 PORT = int(os.environ.get("PORT", "9101"))
 ROBOT_URL = os.environ.get("ROBOT_URL", "http://localhost:8101")  # heartbeat only
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:3000")
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3:4b")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://localhost:4000/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "robot-brain")
 JWT_TOKEN = load_token(AGENT_ID)
+LLM_RETRIES = int(os.environ.get("LLM_RETRIES", "3"))
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "8"))
 HEARTBEAT_INTERVAL = float(os.environ.get("HEARTBEAT_INTERVAL", "0.5"))
 
 tracer = init_tracing(AGENT_ID)
 
-llm = AsyncOpenAI(
-    base_url=f"{GATEWAY_URL}/llm/v1",
-    api_key="not-needed-identity-is-jwt",
-    default_headers={"Authorization": f"Bearer {JWT_TOKEN}"},
-)
+# The JWT IS the api key: one identity for thoughts (LLM) and muscles (MCP).
+llm = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=JWT_TOKEN or "missing-token")
 mcp = GatewayMCP(f"{GATEWAY_URL}/mcp/{ROBOT_ID}", JWT_TOKEN)
 
 SYSTEM = f"""You are the cognition agent for warehouse robot {ROBOT_ID}.
@@ -76,15 +75,26 @@ async def run_task(task: str) -> str:
         for step in range(MAX_STEPS):
             with tracer.start_as_current_span("llm.plan") as llm_span:
                 llm_span.set_attribute("step", step)
-                try:
-                    resp = await llm.chat.completions.create(
-                        model=LLM_MODEL,
-                        messages=messages,
-                        tools=tools,
-                        temperature=0.1,
-                    )
-                except Exception as e:
-                    return json.dumps({"status": "failed", "detail": f"inference unavailable: {e}"})
+                resp = None
+                for attempt in range(LLM_RETRIES):
+                    # Bounded client-side retries: the request that trips the
+                    # gateway's eviction fails, the retry lands on the next
+                    # rung — "no failed missions" (Failover pillar).
+                    try:
+                        resp = await llm.chat.completions.create(
+                            model=LLM_MODEL,
+                            messages=messages,
+                            tools=tools,
+                            temperature=0.1,
+                        )
+                        break
+                    except Exception as e:
+                        llm_span.set_attribute(f"retry.{attempt}.error", str(e)[:200])
+                        if attempt == LLM_RETRIES - 1:
+                            return json.dumps(
+                                {"status": "failed", "detail": f"inference unavailable: {e}"}
+                            )
+                        await asyncio.sleep(1.0)
             msg = resp.choices[0].message
             if not msg.tool_calls:
                 content = (msg.content or "").strip()

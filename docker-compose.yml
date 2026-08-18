@@ -18,7 +18,8 @@ x-agent: &agent
     - ./gateway/jwt/tokens.json:/jwt/tokens.json:ro
   environment: &agent-env
     GATEWAY_URL: http://gateway:3000
-    LLM_MODEL: ${PRIMARY_MODEL:-qwen3:4b}
+    LLM_BASE_URL: http://gateway:4000/v1
+    LLM_MODEL: robot-brain # virtual model: the failover chain, not one provider
     OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
 
 services:
@@ -83,7 +84,8 @@ services:
     image: ghcr.io/agentgateway/agentgateway:v1.4.1
     command: ["-f", "/etc/agentgateway/config.yaml"]
     ports:
-      - "3000:3000"    # data plane: /llm, /mcp/*, /a2a/*
+      - "3000:3000"    # MCP + A2A data plane: /mcp/*, /a2a/*
+      - "4000:4000"    # LLM data plane (OpenAI-compatible, virtual model "robot-brain")
       - "15000:15000"  # UI / admin
       - "15020:15020"  # metrics
     volumes:
@@ -94,7 +96,12 @@ services:
     environment:
       # UI binds localhost-only by default; expose it for the demo screen.
       ADMIN_ADDR: 0.0.0.0:15000
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      PRIMARY_MODEL: ${PRIMARY_MODEL:-qwen3:4b}
+      FALLBACK_MODEL: ${FALLBACK_MODEL:-qwen2.5:0.5b}
+      PRIMARY_BASE_URL: ${PRIMARY_BASE_URL:-http://ollama-primary:11434/v1}
+      FALLBACK_BASE_URL: ${FALLBACK_BASE_URL:-http://ollama-fallback:11434/v1}
+    extra_hosts:
+      - host.docker.internal:host-gateway # host-ollama override works on Linux too
 
   orchestrator:
     <<: *agent

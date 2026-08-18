@@ -1,4 +1,217 @@
-# PLACEHOLDER — replaced in M2/M3 once validated against the pinned
-# agentgateway v1.4.1 schema (see docs/agentgateway-v1.4-reference.md).
-# This file is THE robot action envelope: review it like code, diff it like code.
-binds: []
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+#
+# ══════════════════════════════════════════════════════════════════════════
+#  physical-ai-demo — agentgateway v1.4.1 config
+#  THIS FILE IS THE ROBOT FLEET'S ACTION ENVELOPE.
+#  Review it like code. Diff it like code. Nothing a model "wants" matters
+#  unless a rule below allows it. (Predictability pillar — PRD §2)
+# ══════════════════════════════════════════════════════════════════════════
+
+config:
+  logging:
+    format: json # every request becomes an auditable JSON line (Safety)
+  tracing:
+    otlpEndpoint: http://otel-collector:4317
+    randomSampling: true # demo: trace everything; agentevals scores the traces
+  metrics:
+    fields:
+      add:
+        identity: 'default(jwt.sub, "anonymous")' # tokens-by-identity (Predictability)
+
+# ── The flight recorder (Safety pillar) ────────────────────────────────────
+# Every MCP tool call is logged with identity, tool, arguments, and outcome.
+frontendPolicies:
+  accessLog:
+    add:
+      identity: 'default(jwt.sub, "anonymous")'
+      tool: 'default(mcp.tool.name, "")'
+      tool_args: 'default(mcp.tool.arguments, {})'
+      tool_error: 'default(mcp.tool.error, "")'
+      llm_input_tokens: 'default(llm.inputTokens, 0)'
+      llm_output_tokens: 'default(llm.outputTokens, 0)'
+
+gateways:
+  default:
+    port: 3000 # MCP (muscle commands) + A2A (agent conversations)
+    jwtAuth:
+      mode: strict # no token, no entry — default 'optional' would wave traffic through
+      issuer: physical-ai-demo
+      audiences: [agentgateway]
+      jwks:
+        file: /etc/agentgateway/jwks.json
+  llm:
+    port: 4000 # inference (thoughts)
+    jwtAuth:
+      mode: strict
+      issuer: physical-ai-demo
+      audiences: [agentgateway]
+      jwks:
+        file: /etc/agentgateway/jwks.json
+
+# ── Cognition tier: LLM failover chain (Failover pillar) ───────────────────
+# ollama-primary → ollama-fallback → mock-llm. Eviction is what makes failover
+# real: after N consecutive failures a rung is pulled for `duration`, and
+# traffic lands on the next priority. Client-side bounded retries cover the
+# triggering request (agents/, "no failed missions").
+llm:
+  gateways: [llm]
+  models:
+    - name: primary
+      visibility: internal
+      provider: ollama
+      params:
+        model: $PRIMARY_MODEL
+        baseUrl: $PRIMARY_BASE_URL # containerized ollama by default; point at
+        # http://host.docker.internal:11434/v1 to ride the host's Metal GPU on a Mac
+      health:
+        eviction:
+          consecutiveFailures: 1
+          duration: 15s
+    - name: fallback
+      visibility: internal
+      provider: ollama
+      params:
+        model: $FALLBACK_MODEL
+        baseUrl: $FALLBACK_BASE_URL
+      health:
+        eviction:
+          consecutiveFailures: 1
+          duration: 15s
+    - name: mock
+      visibility: internal
+      provider: openAI # mock-llm speaks the OpenAI dialect
+      params:
+        model: mock-llm
+        baseUrl: http://mock-llm:8200/v1
+      health:
+        eviction:
+          consecutiveFailures: 1
+          duration: 5s
+  virtualModels:
+    - name: robot-brain # the only model name agents know
+      routing:
+        failover:
+          targets:
+            - model: primary
+              priority: 0
+            - model: fallback
+              priority: 1
+            - model: mock
+              priority: 2
+  policies:
+    # Fleet-wide token budget: exhaustion → clean 429, robots safe-idle
+    # rather than flail (Predictability). Debited from provider usage.
+    localRateLimit:
+      - maxTokens: 200000
+        tokensPerFill: 200000
+        fillInterval: 1h
+        type: tokens
+
+routes:
+  # ── Muscle tier: one governed MCP route per robot (Safety pillar) ────────
+  # Deny-by-default: a tool call is refused unless a rule below allows it,
+  # and unauthorized tools are FILTERED FROM tools/list — invisible, not
+  # just refused. mcp.tool.target == the robot name; jwt.sub == identity.
+  - name: mcp-amr-1
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /mcp/amr-1
+    policies:
+      mcpAuthorization:
+        rules:
+          # A robot's own cognition may use its tools EXCEPT the gated three.
+          - 'jwt.sub == "amr-1-cognition" && !(mcp.tool.name in ["disable_safety_stop", "set_torque_limit", "calibrate"])'
+          # The orchestrator sees telemetry only — it delegates, it never actuates.
+          - 'jwt.sub == "orchestrator" && mcp.tool.name in ["get_pose", "get_battery", "get_state"]'
+          # Maintenance identity: full surface, including gated tools.
+          - 'jwt.sub == "maintenance"'
+    backends:
+      - mcp:
+          targets:
+            - name: amr-1
+              mcp:
+                host: http://amr-1:8101/mcp
+          statefulMode: stateless
+
+  - name: mcp-amr-2
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /mcp/amr-2
+    policies:
+      mcpAuthorization:
+        rules:
+          - 'jwt.sub == "amr-2-cognition" && !(mcp.tool.name in ["disable_safety_stop", "set_torque_limit", "calibrate"])'
+          - 'jwt.sub == "orchestrator" && mcp.tool.name in ["get_pose", "get_battery", "get_state"]'
+          - 'jwt.sub == "maintenance"'
+    backends:
+      - mcp:
+          targets:
+            - name: amr-2
+              mcp:
+                host: http://amr-2:8102/mcp
+          statefulMode: stateless
+
+  - name: mcp-arm-1
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /mcp/arm-1
+    policies:
+      mcpAuthorization:
+        rules:
+          - 'jwt.sub == "arm-1-cognition" && !(mcp.tool.name in ["disable_safety_stop", "set_torque_limit", "calibrate"])'
+          - 'jwt.sub == "orchestrator" && mcp.tool.name in ["get_pose", "get_battery", "get_state"]'
+          - 'jwt.sub == "maintenance"'
+    backends:
+      - mcp:
+          targets:
+            - name: arm-1
+              mcp:
+                host: http://arm-1:8103/mcp
+          statefulMode: stateless
+
+  # ── Coordination tier: A2A routes (agent conversations) ──────────────────
+  - name: a2a-orchestrator
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /a2a/orchestrator
+    policies:
+      a2a: {}
+      cors:
+        allowOrigins: ["*"]
+        allowHeaders: [content-type, cache-control, authorization]
+    backends:
+      - host: orchestrator:9000
+
+  - name: a2a-amr-1-cognition
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /a2a/amr-1-cognition
+    policies:
+      a2a: {}
+    backends:
+      - host: amr-1-cognition:9101
+
+  - name: a2a-amr-2-cognition
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /a2a/amr-2-cognition
+    policies:
+      a2a: {}
+    backends:
+      - host: amr-2-cognition:9102
+
+  - name: a2a-arm-1-cognition
+    gateways: [default]
+    matches:
+      - path:
+          pathPrefix: /a2a/arm-1-cognition
+    policies:
+      a2a: {}
+    backends:
+      - host: arm-1-cognition:9103
