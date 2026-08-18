@@ -106,8 +106,10 @@ async def test_anonymous_rejected():
         r = await c.post(
             f"{GATEWAY}/mcp/amr-1",
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-            headers={"Accept": "application/json, text/event-stream",
-                     "Content-Type": "application/json"},
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+            },
         )
         assert r.status_code == 401
 
@@ -115,7 +117,8 @@ async def test_anonymous_rejected():
 def _gateway_logs(tail: int = 400) -> list[dict]:
     out = subprocess.run(
         ["docker", "compose", "logs", "gateway", "--no-log-prefix", "--tail", str(tail)],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         cwd=os.path.join(os.path.dirname(__file__), "../.."),
     ).stdout
     lines = []
@@ -134,7 +137,8 @@ async def test_audit_log_has_identity_tool_args():
     logs = _gateway_logs()
 
     allowed = [
-        rec for rec in logs
+        rec
+        for rec in logs
         if rec.get("identity") == "amr-1-cognition" and rec.get("tool") == "navigate_to"
     ]
     assert allowed, "allowed tool call missing from audit log"
@@ -143,8 +147,8 @@ async def test_audit_log_has_identity_tool_args():
     )
 
     denials = [
-        rec for rec in logs
-        if rec.get("identity") == "amr-1-cognition"
-        and "disable_safety_stop" in json.dumps(rec)
+        rec
+        for rec in logs
+        if rec.get("identity") == "amr-1-cognition" and "disable_safety_stop" in json.dumps(rec)
     ]
     assert denials, "denied gated call left no trace in the audit log"

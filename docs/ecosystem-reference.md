@@ -102,6 +102,7 @@ to stdout. Scaffold: `agentevals evaluator init my_evaluator` (`--runtime js` fo
 # evaluators/no_denied_calls.py  — "no denied calls" style deterministic check
 from agentevals_evaluator_sdk import evaluator, EvalInput, EvalResult
 
+
 @evaluator
 def no_denied_calls(input: EvalInput) -> EvalResult:
     denied = set(input.config.get("denied_tools", []))
@@ -110,6 +111,7 @@ def no_denied_calls(input: EvalInput) -> EvalResult:
         called = {tc["name"] for tc in inv.intermediate_steps.get("tool_calls", [])}
         scores.append(0.0 if called & denied else 1.0)
     return EvalResult(score=min(scores) if scores else 1.0, per_invocation_scores=scores)
+
 
 if __name__ == "__main__":
     no_denied_calls.run()
@@ -340,10 +342,12 @@ from mcp.server import MCPServer
 
 mcp = MCPServer("fleet-ops")
 
+
 @mcp.tool()
 def add(a: int, b: int) -> int:
     """Add two numbers."""
     return a + b
+
 
 if __name__ == "__main__":
     # host default 127.0.0.1, port default 8000, path default /mcp
@@ -357,7 +361,7 @@ required (default binds loopback only).
 ASGI/uvicorn alternative:
 
 ```python
-app = mcp.streamable_http_app()      # serve with: uvicorn server:app --host 0.0.0.0 --port 8000
+app = mcp.streamable_http_app()  # serve with: uvicorn server:app --host 0.0.0.0 --port 8000
 # endpoint: http://<host>:8000/mcp
 # If mounting inside a larger Starlette/FastAPI app, the host app's lifespan MUST enter
 # mcp.session_manager.run() or all requests fail.
@@ -369,10 +373,12 @@ app = mcp.streamable_http_app()      # serve with: uvicorn server:app --host 0.0
 import asyncio
 from mcp import Client
 
+
 async def main() -> None:
-    async with Client("http://localhost:8000/mcp") as client:   # URL => streamable HTTP
+    async with Client("http://localhost:8000/mcp") as client:  # URL => streamable HTTP
         result = await client.call_tool("add", {"a": 1, "b": 2})
         print(result.structured_content)  # {'result': 3}
+
 
 asyncio.run(main())
 ```
@@ -403,20 +409,35 @@ from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 
-skill = AgentSkill(id="echo_bot", name="Echo Bot", description="Echoes requests.",
-                   input_modes=["text/plain"], output_modes=["text/plain"], tags=["a2a"])
+skill = AgentSkill(
+    id="echo_bot",
+    name="Echo Bot",
+    description="Echoes requests.",
+    input_modes=["text/plain"],
+    output_modes=["text/plain"],
+    tags=["a2a"],
+)
 
 card = AgentCard(
-    name="Hello World Agent", description="Just a hello world agent", version="0.0.1",
-    default_input_modes=["text/plain"], default_output_modes=["text/plain"],
+    name="Hello World Agent",
+    description="Just a hello world agent",
+    version="0.0.1",
+    default_input_modes=["text/plain"],
+    default_output_modes=["text/plain"],
     capabilities=AgentCapabilities(streaming=True),
-    supported_interfaces=[AgentInterface(protocol_binding="JSONRPC",
-                                         url="http://127.0.0.1:9999", protocol_version="1.0")],
+    supported_interfaces=[
+        AgentInterface(
+            protocol_binding="JSONRPC", url="http://127.0.0.1:9999", protocol_version="1.0"
+        )
+    ],
     skills=[skill],
 )
 
-handler = DefaultRequestHandler(agent_executor=MyExecutor(),   # subclass a2a.server.agent_execution.AgentExecutor
-                                task_store=InMemoryTaskStore(), agent_card=card)
+handler = DefaultRequestHandler(
+    agent_executor=MyExecutor(),  # subclass a2a.server.agent_execution.AgentExecutor
+    task_store=InMemoryTaskStore(),
+    agent_card=card,
+)
 
 routes = [*create_agent_card_routes(card), *create_jsonrpc_routes(handler, "/")]
 uvicorn.run(Starlette(routes=routes), host="127.0.0.1", port=9999)

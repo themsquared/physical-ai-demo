@@ -65,6 +65,7 @@ llm:
         # http://host.docker.internal:11434/v1 to ride the host's Metal GPU on a Mac
         tokenize: true # request-time token estimation so budgets reject up front
       health:
+        unhealthyExpression: 'response.code >= 400' # 404 model-missing must evict too
         eviction:
           consecutiveFailures: 1
           duration: 15s
@@ -76,6 +77,7 @@ llm:
         baseUrl: $FALLBACK_BASE_URL
         tokenize: true
       health:
+        unhealthyExpression: 'response.code >= 400' # 404 model-missing must evict too
         eviction:
           consecutiveFailures: 1
           duration: 15s
@@ -87,6 +89,7 @@ llm:
         baseUrl: http://mock-llm:8200/v1
         tokenize: true
       health:
+        unhealthyExpression: 'response.code >= 400'
         eviction:
           consecutiveFailures: 1
           duration: 5s

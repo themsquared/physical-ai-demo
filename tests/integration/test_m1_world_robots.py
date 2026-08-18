@@ -57,28 +57,61 @@ async def test_amr_tool_surface_is_complete():
     (The gateway subtracting from this list is the M3 demo.)"""
     tools = await mcp_tools(AMR1)
     assert set(tools) >= {
-        "get_pose", "get_battery", "navigate_to", "dock",
-        "emergency_stop", "set_speed_limit", "disable_safety_stop",
+        "get_pose",
+        "get_battery",
+        "navigate_to",
+        "dock",
+        "emergency_stop",
+        "set_speed_limit",
+        "disable_safety_stop",
     }
     arm_tools = await mcp_tools(ARM1)
     assert set(arm_tools) >= {
-        "get_state", "pick", "place", "home",
-        "emergency_stop", "set_torque_limit", "calibrate",
+        "get_state",
+        "pick",
+        "place",
+        "home",
+        "emergency_stop",
+        "set_torque_limit",
+        "calibrate",
     }
 
 
+async def keep_alive(*robots: str):
+    """Background heartbeats while a blocking motion command runs."""
+    while True:
+        await beat(*robots)
+        await asyncio.sleep(0.5)
+
+
 async def test_navigate_mutates_world():
-    result = await mcp_call(AMR1, "navigate_to", {"zone": "C"})
-    assert '"ok": true' in result.lower() or '"path"' in result
-    async with httpx.AsyncClient() as c:
-        for _ in range(30):
-            await beat(AMR1)  # keep cognition 'alive' so motion continues
+    """navigate_to blocks until arrival (cognition reasons about completed
+    actions); world autoticks in compose, so we just keep cognition alive."""
+    hb = asyncio.ensure_future(keep_alive(AMR1))
+    ticker = None
+
+    async def tick_loop():
+        async with httpx.AsyncClient() as c:
+            while True:
+                await c.post(f"{WORLD}/tick")
+                await asyncio.sleep(0.2)
+
+    try:
+        async with httpx.AsyncClient() as c:
+            autotick = (await c.get(f"{WORLD}/state")).json()["tick"]
+            await asyncio.sleep(1.2)
+            autotick = (await c.get(f"{WORLD}/state")).json()["tick"] - autotick
+        if autotick == 0:  # CI/local runs may disable the autoticker
+            ticker = asyncio.ensure_future(tick_loop())
+        result = await mcp_call(AMR1, "navigate_to", {"zone": "C"})
+        assert '"ok": true' in result.lower(), result
+        async with httpx.AsyncClient() as c:
             state = (await c.get(f"{WORLD}/state")).json()
-            if state["robots"]["amr-1"]["zone"] == "C":
-                break
-            await c.post(f"{WORLD}/tick")
-            await asyncio.sleep(0.1)
-    assert state["robots"]["amr-1"]["zone"] == "C"
+        assert state["robots"]["amr-1"]["zone"] == "C"
+    finally:
+        hb.cancel()
+        if ticker:
+            ticker.cancel()
 
 
 async def test_reflex_refuses_human_zone_in_process():

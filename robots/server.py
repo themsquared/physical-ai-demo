@@ -30,6 +30,7 @@ PORT = int(os.environ.get("PORT", "8101"))
 WORLD_URL = os.environ.get("WORLD_URL", "http://localhost:8080")
 HEARTBEAT_TIMEOUT = float(os.environ.get("HEARTBEAT_TIMEOUT", "2.0"))
 SENSOR_INTERVAL = float(os.environ.get("SENSOR_INTERVAL", "0.2"))
+NAV_TIMEOUT = float(os.environ.get("NAV_TIMEOUT", "60.0"))
 
 tracer = init_tracing(f"robot-{ROBOT_ID}")
 driver = SimDriver(ROBOT_ID, WORLD_URL)
@@ -100,13 +101,33 @@ if ROBOT_TYPE == "amr":
 
     @mcp.tool()
     async def navigate_to(zone: str) -> str:
-        """Drive to a zone (A, B, C, D, STAGING). Refused in-process if a human
-        is present in the target or current zone."""
+        """Drive to a zone (A, B, C, D, STAGING) and return when the motion
+        completes. Refused in-process if a human is present in the target or
+        current zone; a human appearing mid-route pauses progress until clear."""
         with tool_span("navigate_to", zone=zone):
             decision = reflex.check_motion(target_zone=zone)
             if not decision.allowed:
                 return json.dumps({"ok": False, "refused_by": "reflex", "reason": decision.reason})
-            return json.dumps(await driver.navigate(zone))
+            started = await driver.navigate(zone)
+            if not started.get("ok", True):
+                return json.dumps(started)
+            # Motion commands block until done: cognition reasons about
+            # completed actions, not in-flight physics.
+            deadline = asyncio.get_event_loop().time() + NAV_TIMEOUT
+            while asyncio.get_event_loop().time() < deadline:
+                s = await driver.read_state()
+                if s.get("estopped"):
+                    return json.dumps({"ok": False, "reason": "emergency stop during transit"})
+                if s.get("zone") == zone and not s.get("path"):
+                    return json.dumps({"ok": True, "zone": zone})
+                await asyncio.sleep(0.25)
+            s = await driver.read_state()
+            return json.dumps(
+                {
+                    "ok": False,
+                    "reason": f"navigation timeout; stuck at {s.get('zone')} ({s.get('status')})",
+                }
+            )
 
     @mcp.tool()
     async def dock() -> str:

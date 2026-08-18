@@ -29,12 +29,19 @@ def make_app(name: str, description: str, skills: list[dict], handler: Handler) 
         "skills": skills,
     }
 
-    @app.get("/.well-known/agent-card.json")
-    @app.get("/.well-known/agent.json")  # older clients look here
-    async def agent_card() -> dict:
-        return card
+    @app.get("/healthz")
+    async def healthz() -> dict:
+        return {"ok": True, "agent": name}
 
-    @app.post("/")
+    # The gateway forwards requests with their ORIGINAL path (/a2a/<agent>/...),
+    # so both the card and the JSON-RPC endpoint answer on any path.
+    @app.get("/{full_path:path}")
+    async def agent_card(full_path: str) -> dict:
+        if full_path.endswith(("agent-card.json", "agent.json")) or full_path in ("", "card"):
+            return card
+        return card  # A2A GET discovery is the only GET surface we serve
+
+    @app.post("/{full_path:path}")
     async def rpc(request: Request) -> JSONResponse:
         body = await request.json()
         rpc_id = body.get("id")
@@ -64,10 +71,6 @@ def make_app(name: str, description: str, skills: list[dict], handler: Handler) 
                 },
             }
         )
-
-    @app.get("/healthz")
-    async def healthz() -> dict:
-        return {"ok": True, "agent": name}
 
     return app
 

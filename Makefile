@@ -53,8 +53,9 @@ verify-safety: $(VENV)
 	$(VENVPY) -m pytest tests/integration/test_governance.py -q -x
 	bash scripts/verify-budget.sh
 
-verify-m4:
+verify-m4: $(VENV)
 	bash scripts/run-mission.sh --verify
+	$(VENVPY) -m pytest tests/integration/test_m4_fleet.py -q -x
 
 verify-speed: $(VENV)
 	$(VENVPY) bench/bench.py --assert-slo
