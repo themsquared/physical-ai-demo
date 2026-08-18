@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: warehouse
+
+resources:
+  - namespace.yaml
+  - world.yaml
+  - robots.yaml
+  - brains.yaml
+  - gateway.yaml
+  - agents.yaml
+  - otel-collector.yaml
+  - fleet-mcp.yaml
+
+# The SAME gateway/config.yaml that runs under docker compose — one config
+# artifact across sim → k8s → Jetson (Repeatability). Generated from the repo
+# file so a git diff on the envelope shows up identically in both worlds.
+configMapGenerator:
+  - name: gateway-config
+    files:
+      - config.yaml=../../gateway/config.yaml
+
+# Demo-only JWT material. Regenerate with scripts/gen-jwts.py before applying;
+# never commit real secrets. tokens.json is the same file the agents load.
+secretGenerator:
+  - name: gateway-jwks
+    files:
+      - jwks.json=../../gateway/jwt/jwks.json
+  - name: agent-tokens
+    files:
+      - tokens.json=../../gateway/jwt/tokens.json
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# k3d (Mac) overlay. Identical to base today; the seam exists so the Jetson
+# overlay can pin arm64 nodeSelectors / smaller models without touching base.
+resources:
+  - ../../base

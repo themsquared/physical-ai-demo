@@ -1,0 +1,50 @@
+# fleet-mcp: k8s ops tools for the kagent fleet-sre agent.
+# RBAC is the Ops-tier equivalent of the robot gateway's CEL envelope:
+# the fleet-sre can ONLY read pods/logs/events and restart deployments in the
+# warehouse namespace — nothing else, nowhere else. Deny-by-default, in YAML.
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: fleet-mcp, namespace: warehouse }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: fleet-sre, namespace: warehouse }
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, patch] # patch = roll-restart; no create/delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: fleet-sre, namespace: warehouse }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: fleet-sre }
+subjects: [{ kind: ServiceAccount, name: fleet-mcp, namespace: warehouse }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: fleet-mcp, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: fleet-mcp } }
+  template:
+    metadata: { labels: { app: fleet-mcp } }
+    spec:
+      serviceAccountName: fleet-mcp
+      containers:
+        - name: fleet-mcp
+          image: physical-ai-demo/fleet-mcp:local
+          ports: [{ containerPort: 8000 }]
+          env:
+            - { name: FLEET_NAMESPACE, value: warehouse }
+            - { name: PORT, value: "8000" }
+          readinessProbe: { httpGet: { path: /healthz, port: 8000 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: fleet-mcp, namespace: warehouse }
+spec:
+  selector: { app: fleet-mcp }
+  ports: [{ port: 8000, targetPort: 8000 }]

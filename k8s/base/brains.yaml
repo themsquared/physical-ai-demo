@@ -1,0 +1,48 @@
+# Deterministic brains (reproducible failover chain, no GPU needed).
+# Swap for an Ollama Deployment+PVC by pointing the gateway's PRIMARY/FALLBACK
+# base URLs at it (see k8s/base/ollama.yaml, disabled by default).
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mock-llm, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mock-llm } }
+  template:
+    metadata: { labels: { app: mock-llm } }
+    spec:
+      containers:
+        - name: mock
+          image: physical-ai-demo/mock-llm:local
+          ports: [{ containerPort: 8200 }]
+          env: [{ name: MOCK_MODEL_NAME, value: mock-llm }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8200 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mock-llm, namespace: warehouse }
+spec:
+  selector: { app: mock-llm }
+  ports: [{ port: 8200, targetPort: 8200 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: mock-edge, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mock-edge } }
+  template:
+    metadata: { labels: { app: mock-edge } }
+    spec:
+      containers:
+        - name: mock
+          image: physical-ai-demo/mock-llm:local
+          ports: [{ containerPort: 8200 }]
+          env: [{ name: MOCK_MODEL_NAME, value: edge-sim }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8200 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: mock-edge, namespace: warehouse }
+spec:
+  selector: { app: mock-edge }
+  ports: [{ port: 8200, targetPort: 8200 }]

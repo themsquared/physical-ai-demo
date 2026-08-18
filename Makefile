@@ -72,6 +72,17 @@ verify-repeat: $(VENV)
 verify-chaos: $(VENV)
 	$(VENVPY) -m pytest tests/integration/test_chaos.py -q
 
+# ---- k8s / Ops tier (needs a live cluster; not in the CI gate) ----
+
+k8s-up:             ## stand up the whole demo on k3d + kagent fleet-sre
+	bash k8s/setup-k3d.sh
+
+verify-kagent:      ## Ops encore: fleet-sre diagnoses + remediates a crashloop
+	bash scripts/verify-kagent.sh
+
+k8s-render:         ## render + schema-validate all warehouse manifests (no cluster mutate)
+	kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/overlays/k3d
+
 verify-all: verify-m0 verify-m1 verify-failover verify-safety verify-m4 verify-speed verify-repeat verify-chaos
 
 bench: $(VENV)

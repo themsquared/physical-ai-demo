@@ -1,0 +1,84 @@
+# Three robot MCP servers from one image, parameterized by env (same as compose).
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: amr-1, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: amr-1 } }
+  template:
+    metadata: { labels: { app: amr-1, tier: robot } }
+    spec:
+      containers:
+        - name: robot
+          image: physical-ai-demo/robot:local
+          ports: [{ containerPort: 8101 }]
+          env:
+            - { name: ROBOT_ID, value: amr-1 }
+            - { name: ROBOT_TYPE, value: amr }
+            - { name: PORT, value: "8101" }
+            - { name: WORLD_URL, value: http://world:8080 }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          readinessProbe: { httpGet: { path: /healthz, port: 8101 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: amr-1, namespace: warehouse }
+spec:
+  selector: { app: amr-1 }
+  ports: [{ port: 8101, targetPort: 8101 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: amr-2, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: amr-2 } }
+  template:
+    metadata: { labels: { app: amr-2, tier: robot } }
+    spec:
+      containers:
+        - name: robot
+          image: physical-ai-demo/robot:local
+          ports: [{ containerPort: 8102 }]
+          env:
+            - { name: ROBOT_ID, value: amr-2 }
+            - { name: ROBOT_TYPE, value: amr }
+            - { name: PORT, value: "8102" }
+            - { name: WORLD_URL, value: http://world:8080 }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          readinessProbe: { httpGet: { path: /healthz, port: 8102 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: amr-2, namespace: warehouse }
+spec:
+  selector: { app: amr-2 }
+  ports: [{ port: 8102, targetPort: 8102 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: arm-1, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: arm-1 } }
+  template:
+    metadata: { labels: { app: arm-1, tier: robot } }
+    spec:
+      containers:
+        - name: robot
+          image: physical-ai-demo/robot:local
+          ports: [{ containerPort: 8103 }]
+          env:
+            - { name: ROBOT_ID, value: arm-1 }
+            - { name: ROBOT_TYPE, value: arm }
+            - { name: PORT, value: "8103" }
+            - { name: WORLD_URL, value: http://world:8080 }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          readinessProbe: { httpGet: { path: /healthz, port: 8103 } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: arm-1, namespace: warehouse }
+spec:
+  selector: { app: arm-1 }
+  ports: [{ port: 8103, targetPort: 8103 }]

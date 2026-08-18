@@ -1,0 +1,131 @@
+# Orchestrator + 3 cognition agents. Same image, env-parameterized.
+# Each mounts the shared demo tokens secret and loads its own identity.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: orchestrator, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: orchestrator } }
+  template:
+    metadata: { labels: { app: orchestrator, tier: agent } }
+    spec:
+      containers:
+        - name: agent
+          image: physical-ai-demo/agent:local
+          command: ["python", "-m", "agents.orchestrator"]
+          ports: [{ containerPort: 9000 }]
+          env:
+            - { name: PORT, value: "9000" }
+            - { name: GATEWAY_URL, value: http://gateway:3000 }
+            - { name: LLM_BASE_URL, value: http://gateway:4000/v1 }
+            - { name: LLM_MODEL, value: robot-brain }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          volumeMounts: [{ name: jwt, mountPath: /jwt, readOnly: true }]
+          readinessProbe: { httpGet: { path: /healthz, port: 9000 } }
+      volumes: [{ name: jwt, secret: { secretName: agent-tokens } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: orchestrator, namespace: warehouse }
+spec:
+  selector: { app: orchestrator }
+  ports: [{ port: 9000, targetPort: 9000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: amr-1-cognition, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: amr-1-cognition } }
+  template:
+    metadata: { labels: { app: amr-1-cognition, tier: agent } }
+    spec:
+      containers:
+        - name: agent
+          image: physical-ai-demo/agent:local
+          command: ["python", "-m", "agents.cognition"]
+          ports: [{ containerPort: 9101 }]
+          env:
+            - { name: ROBOT_ID, value: amr-1 }
+            - { name: ROBOT_URL, value: http://amr-1:8101 }
+            - { name: PORT, value: "9101" }
+            - { name: GATEWAY_URL, value: http://gateway:3000 }
+            - { name: LLM_BASE_URL, value: http://gateway:4000/v1 }
+            - { name: LLM_MODEL, value: robot-brain }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          volumeMounts: [{ name: jwt, mountPath: /jwt, readOnly: true }]
+          readinessProbe: { httpGet: { path: /healthz, port: 9101 } }
+      volumes: [{ name: jwt, secret: { secretName: agent-tokens } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: amr-1-cognition, namespace: warehouse }
+spec:
+  selector: { app: amr-1-cognition }
+  ports: [{ port: 9101, targetPort: 9101 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: amr-2-cognition, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: amr-2-cognition } }
+  template:
+    metadata: { labels: { app: amr-2-cognition, tier: agent } }
+    spec:
+      containers:
+        - name: agent
+          image: physical-ai-demo/agent:local
+          command: ["python", "-m", "agents.cognition"]
+          ports: [{ containerPort: 9102 }]
+          env:
+            - { name: ROBOT_ID, value: amr-2 }
+            - { name: ROBOT_URL, value: http://amr-2:8102 }
+            - { name: PORT, value: "9102" }
+            - { name: GATEWAY_URL, value: http://gateway:3000 }
+            - { name: LLM_BASE_URL, value: http://gateway:4000/v1 }
+            - { name: LLM_MODEL, value: robot-brain }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          volumeMounts: [{ name: jwt, mountPath: /jwt, readOnly: true }]
+          readinessProbe: { httpGet: { path: /healthz, port: 9102 } }
+      volumes: [{ name: jwt, secret: { secretName: agent-tokens } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: amr-2-cognition, namespace: warehouse }
+spec:
+  selector: { app: amr-2-cognition }
+  ports: [{ port: 9102, targetPort: 9102 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: arm-1-cognition, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: arm-1-cognition } }
+  template:
+    metadata: { labels: { app: arm-1-cognition, tier: agent } }
+    spec:
+      containers:
+        - name: agent
+          image: physical-ai-demo/agent:local
+          command: ["python", "-m", "agents.cognition"]
+          ports: [{ containerPort: 9103 }]
+          env:
+            - { name: ROBOT_ID, value: arm-1 }
+            - { name: ROBOT_URL, value: http://arm-1:8103 }
+            - { name: PORT, value: "9103" }
+            - { name: GATEWAY_URL, value: http://gateway:3000 }
+            - { name: LLM_BASE_URL, value: http://gateway:4000/v1 }
+            - { name: LLM_MODEL, value: robot-brain }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          volumeMounts: [{ name: jwt, mountPath: /jwt, readOnly: true }]
+          readinessProbe: { httpGet: { path: /healthz, port: 9103 } }
+      volumes: [{ name: jwt, secret: { secretName: agent-tokens } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: arm-1-cognition, namespace: warehouse }
+spec:
+  selector: { app: arm-1-cognition }
+  ports: [{ port: 9103, targetPort: 9103 }]

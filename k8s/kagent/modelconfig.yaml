@@ -1,0 +1,14 @@
+# fleet-sre's brain. Points at the SAME gateway LLM endpoint the robots use
+# (robot-brain virtual model → failover chain) so ops inference is governed and
+# traced exactly like cognition inference. Swap to a direct Ollama host for a
+# tool-calling-capable model on the Jetson.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: fleet-brain
+  namespace: kagent
+spec:
+  provider: Ollama
+  model: robot-brain
+  ollama:
+    host: http://gateway.warehouse.svc.cluster.local:4000

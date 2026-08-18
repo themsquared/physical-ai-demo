@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: world
+  namespace: warehouse
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: world } }
+  template:
+    metadata: { labels: { app: world } }
+    spec:
+      containers:
+        - name: world
+          image: physical-ai-demo/world:local
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: WORLD_SEED, value: "42" }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector:4318 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: world
+  namespace: warehouse
+spec:
+  selector: { app: world }
+  ports: [{ port: 8080, targetPort: 8080 }]

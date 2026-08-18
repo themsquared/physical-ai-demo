@@ -1,0 +1,47 @@
+# agentgateway — same image, same config CONTENT as compose (Repeatability).
+# The config.yaml and jwks.json are injected by kustomize (see kustomization.yaml
+# configMapGenerator/secretGenerator) from the repo's gateway/ dir, with the LLM
+# base URLs overridden for k8s service DNS via env.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, namespace: warehouse }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: gateway
+          image: ghcr.io/agentgateway/agentgateway:v1.4.1
+          args: ["-f", "/etc/agentgateway/config.yaml"]
+          ports:
+            - { containerPort: 3000, name: data }
+            - { containerPort: 4000, name: llm }
+            - { containerPort: 15000, name: admin }
+            - { containerPort: 15020, name: metrics }
+          env:
+            - { name: ADMIN_ADDR, value: 0.0.0.0:15000 }
+            - { name: PRIMARY_MODEL, value: edge-sim }
+            - { name: FALLBACK_MODEL, value: mock-llm }
+            - { name: PRIMARY_BASE_URL, value: http://mock-edge:8200/v1 }
+            - { name: FALLBACK_BASE_URL, value: http://mock-llm:8200/v1 }
+          volumeMounts:
+            - { name: config, mountPath: /etc/agentgateway/config.yaml, subPath: config.yaml }
+            - { name: jwks, mountPath: /etc/agentgateway/jwks.json, subPath: jwks.json }
+          readinessProbe:
+            httpGet: { path: /metrics, port: 15020 }
+      volumes:
+        - { name: config, configMap: { name: gateway-config } }
+        - { name: jwks, secret: { secretName: gateway-jwks } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway, namespace: warehouse }
+spec:
+  selector: { app: gateway }
+  ports:
+    - { name: data, port: 3000, targetPort: 3000 }
+    - { name: llm, port: 4000, targetPort: 4000 }
+    - { name: admin, port: 15000, targetPort: 15000 }
+    - { name: metrics, port: 15020, targetPort: 15020 }

@@ -1,0 +1,34 @@
+# fleet-sre: an agent operating the infrastructure that runs the robots.
+# It diagnoses from logs/events and remediates by rolling a deployment — the
+# Ops-tier expression of the same thesis: agents acting on real systems,
+# through a governed, auditable tool surface.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: fleet-sre
+  namespace: kagent
+spec:
+  type: Declarative
+  declarative:
+    modelConfig: fleet-brain
+    systemMessage: |
+      You are the fleet SRE for a warehouse robot fleet running in the
+      'warehouse' namespace. When asked to investigate a problem:
+        1. list_robot_pods to find unhealthy pods (CrashLoopBackOff, not ready).
+        2. get_pod_events and get_pod_logs on the suspect pod to find the cause.
+        3. If a component is crashlooping or wedged, restart_deployment on its
+           deployment (the deployment name is the pod name without the random suffix).
+        4. get_deployment_status to confirm recovery.
+      Be concise. Report what you found and what you did. Never invent tool output.
+    tools:
+      - type: McpServer
+        mcpServer:
+          name: fleet-mcp
+          kind: RemoteMCPServer
+          apiGroup: kagent.dev
+          toolNames:
+            - list_robot_pods
+            - get_pod_logs
+            - get_pod_events
+            - get_deployment_status
+            - restart_deployment

@@ -1,0 +1,12 @@
+# fleet-mcp exposed to kagent. The tool surface here IS the fleet-sre's
+# capability envelope at the ops tier — mirrored by fleet-mcp's RBAC in-cluster.
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: fleet-mcp
+  namespace: kagent
+spec:
+  description: Warehouse fleet k8s ops (pods, logs, events, deployment restart)
+  protocol: STREAMABLE_HTTP
+  url: http://fleet-mcp.warehouse.svc.cluster.local:8000/mcp
+  timeout: 30s

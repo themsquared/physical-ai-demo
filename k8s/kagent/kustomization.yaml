@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Applied AFTER the kagent controller + CRDs are installed (see setup-k3d.sh).
+resources:
+  - modelconfig.yaml
+  - remote-mcp.yaml
+  - agent.yaml
