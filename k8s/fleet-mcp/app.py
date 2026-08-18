@@ -23,8 +23,9 @@ except config.ConfigException:
 apps = client.AppsV1Api()
 core = client.CoreV1Api()
 
-mcp = FastMCP(name="fleet-mcp", host="0.0.0.0", port=PORT, streamable_http_path="/mcp",
-             stateless_http=True)
+mcp = FastMCP(
+    name="fleet-mcp", host="0.0.0.0", port=PORT, streamable_http_path="/mcp", stateless_http=True
+)
 
 
 @mcp.tool()
@@ -61,9 +62,10 @@ def get_pod_events(pod_name: str) -> str:
     """Recent k8s events for a pod (CrashLoopBackOff, OOMKilled, image pull errors)."""
     field = f"involvedObject.name={pod_name}"
     events = core.list_namespaced_event(NAMESPACE, field_selector=field).items
-    return "\n".join(
-        f"{e.last_timestamp} {e.type}/{e.reason}: {e.message}" for e in events
-    ) or "(no events)"
+    return (
+        "\n".join(f"{e.last_timestamp} {e.type}/{e.reason}: {e.message}" for e in events)
+        or "(no events)"
+    )
 
 
 @mcp.tool()

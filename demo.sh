@@ -29,6 +29,14 @@ pause() { $AUTO && { sleep "${1:-2}"; return; }; printf '%s   … ENTER to conti
 run()   { printf '%s$ %s%s\n' "$c_dim" "$1" "$c_reset"; eval "$1"; }
 
 curl -sf "$WORLD/healthz" >/dev/null || { echo "stack not up — run 'make up' first"; exit 1; }
+# Preflight: make sure the gateway can actually reach the robots (a rebuild may
+# have moved backend IPs out from under a long-lived gateway).
+if ! curl -sf -m 5 -H "Authorization: Bearer $($PY -c "import json;print(json.load(open('gateway/jwt/tokens.json'))['maintenance'])")" \
+     "$GW/mcp/amr-1" -X POST -H 'content-type: application/json' \
+     -H 'accept: application/json, text/event-stream' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' >/dev/null 2>&1; then
+  echo "refreshing gateway backend resolution..."; docker compose up -d --force-recreate gateway >/dev/null 2>&1; sleep 4
+fi
 curl -s -X POST "$WORLD/reset" >/dev/null
 
 clear
@@ -95,7 +103,7 @@ pause
 # ════════════════════════════════ ACT 4 ═══════════════════════════════════
 banner "ACT 4 — SPEED: the governance layer costs less than one servo tick" "$c_speed"
 say "Measure the SAME MCP call direct-to-robot vs through the governed gateway:"
-run "$PY bench/bench.py -n 200 --assert-slo | sed -n '1,12p'"
+run "$PY bench/bench.py -n 500 --assert-slo | grep -vE '^\\s*$'"
 shot "Gateway overhead is single-digit milliseconds. The reflex tier is 0 hops — it's not even in the table."
 pause
 

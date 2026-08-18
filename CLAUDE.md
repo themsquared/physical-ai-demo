@@ -65,6 +65,14 @@ commit real secrets; these are demo-only keys, regenerated on setup.
 | **Repeatability** | agentevals scores two OTel traces, reports drift; CI gate on behavior | 10 identical CI runs vs mock-llm; one config artifact everywhere |
 | **Predictability** | chaos prompts (incl. pallet-label injection) → 0 escapes; budget exhaustion → clean 429 | 0 escapes across ≥20 cases; envelope diffable in git |
 
+## Operational gotcha: gateway DNS after a rebuild
+
+agentgateway resolves backend addresses on start. If you `docker compose up
+--build` a backend (world/robots/agents/mocks) it may get a NEW container IP,
+and a long-running gateway will keep hitting the old one (500s / "connection
+refused"). Fix: `make reset-gateway` (force-recreates just the gateway).
+`make up` already starts the gateway last, and `demo.sh` preflights this.
+
 ## Rules for this repo
 
 - 100% OSS default path. No cloud keys. `ENABLE_CLOUD_FALLBACK` gated, default off.

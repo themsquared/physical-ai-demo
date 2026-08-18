@@ -20,9 +20,17 @@ jwts: $(VENV)
 	$(VENVPY) scripts/gen-jwts.py gateway/jwt
 
 up: jwts            ## demo stack, reproducible deterministic brain (no models/GPU)
-	$(COMPOSE) up -d --build world amr-1 amr-2 arm-1 mock-llm mock-edge gateway \
+	$(COMPOSE) up -d --build world amr-1 amr-2 arm-1 mock-llm mock-edge \
 		orchestrator amr-1-cognition amr-2-cognition arm-1-cognition \
 		otel-collector prometheus grafana
+	@bash scripts/wait-healthy.sh >/dev/null 2>&1 || true
+	@# start the gateway LAST so it resolves fresh backend IPs (avoids stale DNS
+	@# if backends were just rebuilt with new addresses)
+	$(COMPOSE) up -d --force-recreate gateway
+	@echo "up. floor: http://localhost:8085/  grafana: http://localhost:3001  gw ui: http://localhost:15000/ui/"
+
+reset-gateway:      ## re-resolve backends (run after rebuilding any backend image)
+	$(COMPOSE) up -d --force-recreate gateway
 
 up-ollama: jwts     ## add the real Ollama rungs (first run pulls models; slow on Mac CPU)
 	$(COMPOSE) up -d ollama-primary ollama-fallback

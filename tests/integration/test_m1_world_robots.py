@@ -7,7 +7,9 @@ this milestone proves the machine layer beneath it.
 
 import asyncio
 import os
+import subprocess
 import time
+from pathlib import Path
 
 import httpx
 import pytest
@@ -17,6 +19,12 @@ from mcp.client.streamable_http import streamablehttp_client
 WORLD = os.environ.get("WORLD_URL", "http://localhost:8085")
 AMR1 = os.environ.get("AMR1_URL", "http://localhost:8101")
 ARM1 = os.environ.get("ARM1_URL", "http://localhost:8103")
+ROOT = Path(__file__).parents[2]
+
+
+def compose(*args: str) -> None:
+    """Best-effort compose control; no-op if compose/container absent (bare-process runs)."""
+    subprocess.run(["docker", "compose", *args], cwd=ROOT, capture_output=True)
 
 pytestmark = pytest.mark.asyncio
 
@@ -141,7 +149,18 @@ async def test_estop_is_fast_and_in_process():
 
 async def test_heartbeat_loss_reaches_safe_idle_within_slo():
     """No heartbeats -> SAFE_IDLE. Detection bounded by heartbeat timeout (2s)
-    + transition ≤500ms; we assert the transition tail, not the timeout."""
+    + transition ≤500ms; we assert the transition tail, not the timeout.
+
+    In the full stack amr-1's cognition agent heartbeats it continuously, so we
+    stop that agent for the duration to observe genuine heartbeat loss."""
+    compose("stop", "amr-1-cognition")
+    try:
+        await _assert_heartbeat_loss_safe_idle()
+    finally:
+        compose("start", "amr-1-cognition")
+
+
+async def _assert_heartbeat_loss_safe_idle():
     async with httpx.AsyncClient() as c:
         # establish cognition, then go silent
         await c.post(f"{AMR1}/heartbeat", json={})
