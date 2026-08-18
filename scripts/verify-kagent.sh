@@ -8,6 +8,11 @@ set -euo pipefail
 NS=${NS:-warehouse}
 KAGENT_NS=${KAGENT_NS:-kagent}
 TARGET=${TARGET:-amr-2-cognition}
+# Pin the cluster explicitly — never operate on whatever context happens to be
+# current (a drifting context could hit an unrelated cluster).
+CTX=${KUBE_CONTEXT:-k3d-physical-ai}
+kubectl() { command kubectl --context "$CTX" "$@"; }
+PY=.venv/bin/python; [ -x "$PY" ] || PY=python3
 
 echo "=== verify-kagent ==="
 echo "1) break $TARGET (bad command → CrashLoopBackOff)"
@@ -37,9 +42,9 @@ sleep 3
 kubectl -n "$NS" patch deploy "$TARGET" --type=json -p \
   '[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["python","-m","agents.cognition"]}]'
 
-python scripts/kagent_invoke.py \
+"$PY" scripts/kagent_invoke.py \
   "http://localhost:8083/api/a2a/$KAGENT_NS/fleet-sre" \
-  "Robot component $TARGET in the warehouse namespace is crashlooping. Investigate and remediate it, then confirm it is healthy."
+  "Robot component $TARGET in the warehouse namespace is crashlooping. Investigate it: list the robot pods, get its events and logs, then restart_deployment on $TARGET to remediate, and confirm it recovered."
 
 echo "3) confirm recovery"
 kubectl -n "$NS" rollout status deploy/"$TARGET" --timeout=120s

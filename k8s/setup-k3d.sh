@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 
 CLUSTER=${CLUSTER:-physical-ai}
 KAGENT_VERSION=${KAGENT_VERSION:-0.9.12}
+FLEET_MODEL=${FLEET_MODEL:-qwen2.5-coder:14b}  # must support tool calling; served by host Ollama
 LOADR="--load-restrictor LoadRestrictionsNone"  # gateway config lives outside k8s/
 
 echo "== 1/6 JWT material =="
@@ -22,13 +23,17 @@ docker build -f robots/Dockerfile    -t physical-ai-demo/robot:local .     >/dev
 docker build -f agents/Dockerfile    -t physical-ai-demo/agent:local .     >/dev/null
 docker build -f mock-llm/Dockerfile  -t physical-ai-demo/mock-llm:local .  >/dev/null
 docker build -f k8s/fleet-mcp/Dockerfile -t physical-ai-demo/fleet-mcp:local . >/dev/null
+# Pre-pull agentgateway so k3d imports it too (avoids in-cluster ImagePullBackOff).
+docker pull ghcr.io/agentgateway/agentgateway:v1.4.1 >/dev/null
 k3d image import -c "$CLUSTER" \
   physical-ai-demo/world:local physical-ai-demo/robot:local \
   physical-ai-demo/agent:local physical-ai-demo/mock-llm:local \
-  physical-ai-demo/fleet-mcp:local
+  physical-ai-demo/fleet-mcp:local \
+  ghcr.io/agentgateway/agentgateway:v1.4.1
 
 echo "== 4/6 warehouse stack =="
-kubectl apply -k $LOADR k8s/overlays/k3d
+# `kubectl apply -k` doesn't take --load-restrictor; `kubectl kustomize` does.
+kubectl kustomize $LOADR k8s/overlays/k3d | kubectl apply -f -
 kubectl -n warehouse rollout status deploy/gateway --timeout=180s
 
 echo "== 5/6 kagent (OCI Helm, pinned $KAGENT_VERSION, no default agents) =="
@@ -37,8 +42,8 @@ helm install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds \
 helm install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
   --namespace kagent --version "$KAGENT_VERSION" \
   --set providers.default=ollama \
-  --set providers.ollama.model=robot-brain \
-  --set providers.ollama.config.host=http://gateway.warehouse.svc.cluster.local:4000 \
+  --set providers.ollama.model="$FLEET_MODEL" \
+  --set providers.ollama.config.host=http://host.k3d.internal:11434 \
   $(for a in k8s kgateway istio promql observability argo-rollouts helm \
              cilium-policy cilium-manager cilium-debug; do \
       echo --set ${a}-agent.enabled=false; done) \

@@ -1,14 +1,23 @@
-# fleet-sre's brain. Points at the SAME gateway LLM endpoint the robots use
-# (robot-brain virtual model → failover chain) so ops inference is governed and
-# traced exactly like cognition inference. Swap to a direct Ollama host for a
-# tool-calling-capable model on the Jetson.
+# fleet-sre's brain — a tool-calling-capable model.
+#
+# We use provider: OpenAI pointed at Ollama's OpenAI-COMPATIBLE /v1 endpoint
+# (NOT provider: Ollama). Two reasons, both learned the hard way:
+#   1. kagent's native Ollama path returns tool calls as TEXT for many models;
+#      Ollama's /v1 surface returns structured `tool_calls` the runtime executes.
+#   2. The model MUST actually emit structured tool_calls. Verified on this host:
+#      qwen3:4b ✓ and nemotron ✓ do; qwen2.5-coder and qwen3:0.6b emit text ✗.
+#      qwen3:4b is the sweet spot (2.5GB, Apache-2.0, the PRD's intended primary).
+# The apiKey is a dummy — Ollama ignores it. On a Jetson point baseUrl at an
+# in-cluster Ollama serving qwen3:1.7b.
 apiVersion: kagent.dev/v1alpha2
 kind: ModelConfig
 metadata:
   name: fleet-brain
   namespace: kagent
 spec:
-  provider: Ollama
-  model: robot-brain
-  ollama:
-    host: http://gateway.warehouse.svc.cluster.local:4000
+  provider: OpenAI
+  model: qwen3:4b
+  apiKeySecret: fleet-openai-key
+  apiKeySecretKey: OPENAI_API_KEY
+  openAI:
+    baseUrl: http://host.k3d.internal:11434/v1
