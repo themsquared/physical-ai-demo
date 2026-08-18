@@ -26,6 +26,7 @@ def compose(*args: str) -> None:
     """Best-effort compose control; no-op if compose/container absent (bare-process runs)."""
     subprocess.run(["docker", "compose", *args], cwd=ROOT, capture_output=True)
 
+
 pytestmark = pytest.mark.asyncio
 
 
