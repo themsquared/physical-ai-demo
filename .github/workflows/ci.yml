@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . && ruff format --check .
+      - run: pytest tests/unit -q
+
+  compose-and-mission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - run: docker compose config -q
+      - name: Boot CI stack (mock-llm brain, no Ollama)
+        run: |
+          python scripts/gen-jwts.py gateway/jwt
+          docker compose up -d --build world amr-1 amr-2 arm-1 mock-llm gateway \
+            orchestrator amr-1-cognition amr-2-cognition arm-1-cognition otel-collector
+          scripts/wait-healthy.sh
+      - name: Governance gate (Safety/Predictability)
+        run: pytest tests/integration/test_governance.py -q
+      - name: Deterministic mission (Repeatability)
+        run: bash scripts/run-mission.sh --verify
+      - name: Eval gate (agentevals on OTel traces)
+        run: bash scripts/verify-repeat.sh --ci
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 100
+
+  multi-arch-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build all images for arm64+amd64 (no push on PRs)
+        run: |
+          for svc in world robots agents mock-llm; do
+            docker buildx build --platform linux/amd64,linux/arm64 \
+              -f $svc/Dockerfile . -t physical-ai-demo/$svc:ci
+          done

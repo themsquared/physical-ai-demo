@@ -1,0 +1,4 @@
+# PLACEHOLDER — replaced in M2/M3 once validated against the pinned
+# agentgateway v1.4.1 schema (see docs/agentgateway-v1.4-reference.md).
+# This file is THE robot action envelope: review it like code, diff it like code.
+binds: []

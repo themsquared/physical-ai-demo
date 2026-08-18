@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>warehouse-world</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --line:#232a3a; --text:#dbe2f0; --dim:#77809a;
+    --amr:#4da3ff; --arm:#c792ea; --human:#ff5370; --pallet:#ffcb6b; --ok:#66d9a5;
+  }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 "SF Mono",ui-monospace,Menlo,monospace;padding:24px}
+  h1{font-size:16px;font-weight:600;letter-spacing:.08em;margin:0 0 4px}
+  h1 span{color:var(--dim);font-weight:400}
+  .meta{color:var(--dim);font-size:12px;margin-bottom:16px}
+  .floor{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+  .zone{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    min-height:220px;padding:10px;position:relative;transition:border-color .3s}
+  .zone.human{border-color:var(--human);box-shadow:0 0 18px rgba(255,83,112,.25)}
+  .zone h2{font-size:12px;color:var(--dim);margin:0 0 8px;letter-spacing:.15em}
+  .zone.human h2::after{content:" ⚠ HUMAN";color:var(--human)}
+  .bot{display:flex;align-items:center;gap:8px;background:#0e1420;border:1px solid var(--line);
+    border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:12px}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .amr .dot{background:var(--amr)} .arm .dot{background:var(--arm)}
+  .bot.estop .dot{background:var(--human);animation:blink 1s infinite}
+  .bot.idle-mode{opacity:.55}
+  .bot small{color:var(--dim);display:block}
+  .rack{display:inline-block;background:#1a1408;border:1px solid #3a2f14;color:var(--pallet);
+    border-radius:6px;padding:2px 7px;margin:0 4px 4px 0;font-size:11px}
+  .rack.empty{color:var(--dim);background:transparent;border-color:var(--line)}
+  .carry{color:var(--pallet)}
+  @keyframes blink{50%{opacity:.3}}
+  .row{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .panel h2{font-size:12px;color:var(--dim);margin:0 0 8px;letter-spacing:.15em}
+  #events{max-height:200px;overflow-y:auto;font-size:12px}
+  #events div{padding:2px 0;border-bottom:1px solid #161b28;color:var(--dim)}
+  #events div b{color:var(--text);font-weight:600}
+  #events .k-estop b,#events .k-blocked b{color:var(--human)}
+  #events .k-delivered b{color:var(--ok)}
+  #delivered{font-size:20px;color:var(--ok)}
+</style>
+</head>
+<body>
+<h1>WAREHOUSE-WORLD <span>· physical-ai-demo · solo.io oss stack</span></h1>
+<div class="meta">tick <b id="tick">–</b> · sim <b id="simtime">–</b>s · seed <b id="seed">–</b></div>
+<div class="floor" id="floor"></div>
+<div class="row">
+  <div class="panel"><h2>EVENTS</h2><div id="events"></div></div>
+  <div class="panel"><h2>DELIVERED TO STAGING</h2><div id="delivered">—</div></div>
+</div>
+<script>
+const floor=document.getElementById('floor');
+function render(s){
+  document.getElementById('tick').textContent=s.tick;
+  document.getElementById('simtime').textContent=s.sim_time;
+  document.getElementById('seed').textContent=s.seed;
+  floor.innerHTML='';
+  for(const z of s.zones){
+    const div=document.createElement('div');
+    div.className='zone'+(s.humans[z]?' human':'');
+    let html=`<h2>ZONE ${z}</h2>`;
+    for(const[rid,rack]of Object.entries(s.racks)){
+      if(rack.zone!==z)continue;
+      html+=rack.pallet?`<span class="rack">${rid}: ${rack.pallet}</span>`
+                       :`<span class="rack empty">${rid}: —</span>`;
+    }
+    for(const[id,r]of Object.entries(s.robots)){
+      if(r.zone!==z)continue;
+      const cls=[r.type, r.estopped?'estop':'', r.mode!=='ACTIVE'?'idle-mode':''].join(' ');
+      const extra=r.type==='amr'
+        ?(r.carrying?`<span class="carry">▣ ${r.carrying}</span> · `:'')+`🔋${r.battery}%`
+        :(r.holding?`<span class="carry">✊ ${r.holding}</span>`:'home');
+      html+=`<div class="bot ${cls}"><span class="dot"></span>
+        <span>${id} <small>${r.mode} · ${r.status} · ${extra}</small></span></div>`;
+    }
+    div.innerHTML=html; floor.appendChild(div);
+  }
+  document.getElementById('delivered').textContent=s.delivered.length?s.delivered.join(', '):'—';
+  const ev=document.getElementById('events');
+  ev.innerHTML=s.events.slice(-40).reverse().map(e=>{
+    const{tick,sim_time,kind,...rest}=e;
+    return `<div class="k-${kind}">t${tick} <b>${kind}</b> ${JSON.stringify(rest)}</div>`;
+  }).join('');
+}
+function connect(){
+  const ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');
+  ws.onmessage=e=>render(JSON.parse(e.data));
+  ws.onclose=()=>setTimeout(connect,1000);
+}
+connect();
+</script>
+</body>
+</html>

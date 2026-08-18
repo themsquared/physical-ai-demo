@@ -1,0 +1,161 @@
+# physical-ai-demo — full stack on one MacBook (arm64) or Jetson (arm64).
+# Default path is 100% OSS, zero cloud keys. CI runs a subset (see `make ci-up`).
+
+x-robot: &robot
+  build: { context: ., dockerfile: robots/Dockerfile }
+  image: physical-ai-demo/robot:local
+  depends_on: [world]
+  environment: &robot-env
+    WORLD_URL: http://world:8080
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    HEARTBEAT_TIMEOUT: "2.0"
+
+x-agent: &agent
+  build: { context: ., dockerfile: agents/Dockerfile }
+  image: physical-ai-demo/agent:local
+  depends_on: [gateway]
+  volumes:
+    - ./gateway/jwt/tokens.json:/jwt/tokens.json:ro
+  environment: &agent-env
+    GATEWAY_URL: http://gateway:3000
+    LLM_MODEL: ${PRIMARY_MODEL:-qwen3:4b}
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+services:
+  world:
+    build: { context: ., dockerfile: world/Dockerfile }
+    image: physical-ai-demo/world:local
+    ports: ["8080:8080"]
+    environment:
+      WORLD_SEED: ${WORLD_SEED:-42}
+      WORLD_AUTOTICK: ${WORLD_AUTOTICK:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+  amr-1:
+    <<: *robot
+    ports: ["8101:8101"]
+    environment:
+      <<: *robot-env
+      ROBOT_ID: amr-1
+      ROBOT_TYPE: amr
+      PORT: "8101"
+
+  amr-2:
+    <<: *robot
+    ports: ["8102:8102"]
+    environment:
+      <<: *robot-env
+      ROBOT_ID: amr-2
+      ROBOT_TYPE: amr
+      PORT: "8102"
+
+  arm-1:
+    <<: *robot
+    ports: ["8103:8103"]
+    environment:
+      <<: *robot-env
+      ROBOT_ID: arm-1
+      ROBOT_TYPE: arm
+      PORT: "8103"
+
+  mock-llm:
+    build: { context: ., dockerfile: mock-llm/Dockerfile }
+    image: physical-ai-demo/mock-llm:local
+    ports: ["8200:8200"]
+
+  ollama-primary:
+    image: ollama/ollama:0.11.4
+    ports: ["11434:11434"]
+    volumes: [ollama-primary-models:/root/.ollama]
+    environment:
+      OLLAMA_MODEL: ${PRIMARY_MODEL:-qwen3:4b}
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 3 && ollama pull $${OLLAMA_MODEL} && wait"]
+
+  ollama-fallback:
+    image: ollama/ollama:0.11.4
+    ports: ["11435:11434"]
+    volumes: [ollama-fallback-models:/root/.ollama]
+    environment:
+      OLLAMA_MODEL: ${FALLBACK_MODEL:-qwen2.5:0.5b}
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 3 && ollama pull $${OLLAMA_MODEL} && wait"]
+
+  gateway:
+    image: ghcr.io/agentgateway/agentgateway:v1.4.1
+    command: ["-f", "/etc/agentgateway/config.yaml"]
+    ports:
+      - "3000:3000"    # data plane: /llm, /mcp/*, /a2a/*
+      - "15000:15000"  # UI / admin
+      - "15020:15020"  # metrics
+    volumes:
+      - ./gateway/config.yaml:/etc/agentgateway/config.yaml:ro
+      - ./gateway/jwt/jwks.json:/etc/agentgateway/jwks.json:ro
+      - audit-logs:/var/log/agentgateway
+    depends_on: [world, amr-1, amr-2, arm-1, mock-llm]
+    environment:
+      # UI binds localhost-only by default; expose it for the demo screen.
+      ADMIN_ADDR: 0.0.0.0:15000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+  orchestrator:
+    <<: *agent
+    command: ["python", "-m", "agents.orchestrator"]
+    ports: ["9000:9000"]
+    environment:
+      <<: *agent-env
+      PORT: "9000"
+
+  amr-1-cognition:
+    <<: *agent
+    ports: ["9101:9101"]
+    environment:
+      <<: *agent-env
+      ROBOT_ID: amr-1
+      ROBOT_URL: http://amr-1:8101
+      PORT: "9101"
+
+  amr-2-cognition:
+    <<: *agent
+    ports: ["9102:9102"]
+    environment:
+      <<: *agent-env
+      ROBOT_ID: amr-2
+      ROBOT_URL: http://amr-2:8102
+      PORT: "9102"
+
+  arm-1-cognition:
+    <<: *agent
+    ports: ["9103:9103"]
+    environment:
+      <<: *agent-env
+      ROBOT_ID: arm-1
+      ROBOT_URL: http://arm-1:8103
+      PORT: "9103"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - ./evals/traces:/traces
+    ports: ["4317:4317", "4318:4318"]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports: ["9090:9090"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports: ["3001:3000"]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  ollama-primary-models:
+  ollama-fallback-models:
+  audit-logs:

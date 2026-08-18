@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+gateway/jwt/*.key
+gateway/jwt/*.pem
+gateway/jwt/tokens.json
+logs/
+audit/
+bench/results/
+evals/traces/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.egg-info/
+dist/
