@@ -21,16 +21,21 @@ one of five hardware imperatives (see pillar table below — it is the acceptanc
 |---|---|
 | agentgateway data plane | 3000 (routes: /llm, /mcp/{robot}, /a2a/{agent}) |
 | agentgateway UI / admin | 15000 |
-| agentgateway metrics | 15020 (verify against docs) |
-| world | 8080 |
-| amr-1 / amr-2 / arm-1 MCP | 8101 / 8102 / 8103 |
+| agentgateway metrics | 15020 (readiness 15021) |
+| world | host 8085 → container 8080 (host 8080 is usually taken by k3d) |
+| amr-1 / amr-2 / arm-1 MCP | 8101 / 8102 / 8103 (path /mcp; also /heartbeat, /healthz) |
 | mock-llm | 8200 |
-| ollama-primary / ollama-fallback | 11434 / 11435 |
+| ollama-primary / ollama-fallback | host 11436 / 11437 → container 11434 (host 11434 = user's own ollama) |
 | orchestrator (A2A) | 9000 |
 | amr-1 / amr-2 / arm-1 cognition (A2A) | 9101 / 9102 / 9103 |
 | otel-collector | 4317 (grpc) / 4318 (http) |
-| Prometheus | 9090 |
+| Prometheus | host 9091 → container 9090 |
 | Grafana | 3001 |
+
+Pinned ecosystem gotchas (full details in docs/ecosystem-reference.md):
+`mcp` pip package pinned `>=1.9,<2` (2.0 removed FastMCP); agentevals is pip
+`agentevals-cli` (NOT `agentevals`); kagent Helm chart pinned 0.9.12
+(kagent.dev/v1alpha2); A2A surface hand-rolled to the 0.3 dialect kagent speaks.
 
 ## JWT identities
 

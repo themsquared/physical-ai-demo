@@ -25,7 +25,7 @@ services:
   world:
     build: { context: ., dockerfile: world/Dockerfile }
     image: physical-ai-demo/world:local
-    ports: ["8080:8080"]
+    ports: ["8085:8080"]  # host 8080 commonly taken (k3d); container port stays 8080
     environment:
       WORLD_SEED: ${WORLD_SEED:-42}
       WORLD_AUTOTICK: ${WORLD_AUTOTICK:-true}
@@ -65,7 +65,7 @@ services:
 
   ollama-primary:
     image: ollama/ollama:0.11.4
-    ports: ["11434:11434"]
+    ports: ["11436:11434"]  # host 11434 is usually the user's own ollama
     volumes: [ollama-primary-models:/root/.ollama]
     environment:
       OLLAMA_MODEL: ${PRIMARY_MODEL:-qwen3:4b}
@@ -73,7 +73,7 @@ services:
 
   ollama-fallback:
     image: ollama/ollama:0.11.4
-    ports: ["11435:11434"]
+    ports: ["11437:11434"]
     volumes: [ollama-fallback-models:/root/.ollama]
     environment:
       OLLAMA_MODEL: ${FALLBACK_MODEL:-qwen2.5:0.5b}
@@ -141,7 +141,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.54.1
-    ports: ["9090:9090"]
+    ports: ["9091:9090"]  # host 9090 commonly taken
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
