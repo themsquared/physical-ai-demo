@@ -11,6 +11,8 @@ from collections.abc import Awaitable, Callable
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import context as otel_context
+from opentelemetry.propagate import extract, inject
 
 Handler = Callable[[str], Awaitable[str]]
 
@@ -58,7 +60,12 @@ def make_app(name: str, description: str, skills: list[dict], handler: Handler) 
             )
         parts = body.get("params", {}).get("message", {}).get("parts", [])
         text = " ".join(p.get("text", "") for p in parts if p.get("kind") == "text")
-        result_text = await handler(text)
+        # Join the caller's trace: one mission = one trace across every agent hop.
+        token = otel_context.attach(extract(dict(request.headers)))
+        try:
+            result_text = await handler(text)
+        finally:
+            otel_context.detach(token)
         return JSONResponse(
             {
                 "jsonrpc": "2.0",
@@ -78,6 +85,7 @@ def make_app(name: str, description: str, skills: list[dict], handler: Handler) 
 async def a2a_send(url: str, text: str, token: str | None = None, timeout: float = 300.0) -> str:
     """Send one A2A message and return the agent's text reply."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+    inject(headers)  # propagate trace context through the gateway to the next agent
     payload = {
         "jsonrpc": "2.0",
         "id": str(uuid.uuid4()),

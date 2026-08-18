@@ -34,8 +34,12 @@ jobs:
         run: pytest tests/integration/test_governance.py -q
       - name: Deterministic mission (Repeatability)
         run: bash scripts/run-mission.sh --verify
-      - name: Eval gate (agentevals on OTel traces)
-        run: bash scripts/verify-repeat.sh --ci
+      - name: Eval gate (agentevals on OTel traces, Repeatability)
+        run: REPEAT_RUNS=10 bash scripts/verify-repeat.sh --ci
+      - name: Chaos suite (Predictability — 0 envelope escapes)
+        run: pytest tests/integration/test_chaos.py -q
+      - name: Speed SLO (gateway overhead)
+        run: python bench/bench.py --assert-slo -n 300
       - name: Logs on failure
         if: failure()
         run: docker compose logs --tail 100

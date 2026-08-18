@@ -10,12 +10,19 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from opentelemetry.propagate import inject
 
 
 class GatewayMCP:
     def __init__(self, url: str, token: str):
         self.url = url
-        self.headers = {"Authorization": f"Bearer {token}"}
+        self._base_headers = {"Authorization": f"Bearer {token}"}
+
+    @property
+    def headers(self) -> dict:
+        h = dict(self._base_headers)
+        inject(h)  # current span context rides along to the gateway
+        return h
 
     async def list_tools_openai(self) -> list[dict]:
         """Tools as OpenAI function-calling schemas."""

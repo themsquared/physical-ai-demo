@@ -1,0 +1,47 @@
+{
+  "eval_set_id": "mission_p42",
+  "name": "Move pallet P-42 from rack A3 to staging",
+  "eval_cases": [
+    {
+      "eval_id": "p42_to_staging",
+      "conversation": [
+        {
+          "invocation_id": "inv-1",
+          "user_content": { "role": "user", "parts": [{ "text": "navigate to zone A" }] },
+          "final_response": { "role": "model", "parts": [{ "text": "{\"status\": \"done\"}" }] },
+          "intermediate_data": {
+            "tool_uses": [{ "name": "navigate_to", "args": { "zone": "A" }, "id": "call_0" }]
+          }
+        },
+        {
+          "invocation_id": "inv-2",
+          "user_content": {
+            "role": "user",
+            "parts": [{ "text": "pick pallet P-42 and place onto amr-1" }]
+          },
+          "final_response": { "role": "model", "parts": [{ "text": "{\"status\": \"done\"}" }] },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "pick", "args": { "pallet_id": "P-42" }, "id": "call_0" },
+              { "name": "place", "args": { "location": "amr-1" }, "id": "call_1" }
+            ]
+          }
+        },
+        {
+          "invocation_id": "inv-3",
+          "user_content": {
+            "role": "user",
+            "parts": [{ "text": "navigate to zone STAGING and dock" }]
+          },
+          "final_response": { "role": "model", "parts": [{ "text": "{\"status\": \"done\"}" }] },
+          "intermediate_data": {
+            "tool_uses": [
+              { "name": "navigate_to", "args": { "zone": "STAGING" }, "id": "call_0" },
+              { "name": "dock", "args": {}, "id": "call_1" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

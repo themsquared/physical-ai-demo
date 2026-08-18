@@ -59,21 +59,56 @@ async def heartbeat_loop() -> None:
 
 
 async def run_task(task: str) -> str:
-    with tracer.start_as_current_span("a2a.task") as span:
+    # Span names/attributes follow OTel GenAI semconv so agentevals can read
+    # runs straight from the collector without re-executing anything.
+    with tracer.start_as_current_span(f"invoke_agent {AGENT_ID}") as span:
+        span.set_attribute("gen_ai.operation.name", "invoke_agent")
+        span.set_attribute("gen_ai.agent.name", AGENT_ID)
         span.set_attribute("agent.id", AGENT_ID)
         span.set_attribute("task.text", task)
+        span.set_attribute("gen_ai.prompt", task)
         try:
             tools = await mcp.list_tools_openai()
         except Exception as e:
             return json.dumps({"status": "failed", "detail": f"cannot reach tools: {e}"})
         span.set_attribute("tools.visible", json.dumps([t["function"]["name"] for t in tools]))
 
+        def semconv_messages(msgs: list[dict]) -> str:
+            """gen_ai.input.messages format: role + typed parts."""
+            out = []
+            for m in msgs:
+                parts = []
+                if m.get("content"):
+                    parts.append({"type": "text", "content": m["content"]})
+                for tc in m.get("tool_calls", []) or []:
+                    parts.append(
+                        {
+                            "type": "tool_call",
+                            "id": tc["id"],
+                            "name": tc["function"]["name"],
+                            "arguments": tc["function"]["arguments"],
+                        }
+                    )
+                if m.get("role") == "tool":
+                    parts = [
+                        {
+                            "type": "tool_call_response",
+                            "id": m.get("tool_call_id"),
+                            "result": m.get("content"),
+                        }
+                    ]
+                out.append({"role": m["role"], "parts": parts})
+            return json.dumps(out)
+
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": task},
         ]
         for step in range(MAX_STEPS):
-            with tracer.start_as_current_span("llm.plan") as llm_span:
+            with tracer.start_as_current_span(f"chat {LLM_MODEL}") as llm_span:
+                llm_span.set_attribute("gen_ai.operation.name", "chat")
+                llm_span.set_attribute("gen_ai.request.model", LLM_MODEL)
+                llm_span.set_attribute("gen_ai.input.messages", semconv_messages(messages))
                 llm_span.set_attribute("step", step)
                 resp = None
                 for attempt in range(LLM_RETRIES):
@@ -95,10 +130,30 @@ async def run_task(task: str) -> str:
                                 {"status": "failed", "detail": f"inference unavailable: {e}"}
                             )
                         await asyncio.sleep(1.0)
+                out_msg = resp.choices[0].message
+                out_parts: list[dict] = []
+                if out_msg.content:
+                    out_parts.append({"type": "text", "content": out_msg.content})
+                for tc in out_msg.tool_calls or []:
+                    out_parts.append(
+                        {
+                            "type": "tool_call",
+                            "id": tc.id,
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    )
+                llm_span.set_attribute(
+                    "gen_ai.output.messages",
+                    json.dumps(
+                        [{"role": "assistant", "parts": out_parts, "finish_reason": "stop"}]
+                    ),
+                )
             msg = resp.choices[0].message
             if not msg.tool_calls:
                 content = (msg.content or "").strip()
                 span.set_attribute("task.result", content[:500])
+                span.set_attribute("gen_ai.completion", content[:500])
                 return content or json.dumps({"status": "done", "detail": "no output"})
             messages.append(
                 {
@@ -113,10 +168,16 @@ async def run_task(task: str) -> str:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                with tracer.start_as_current_span("mcp.tool_call") as tool_span:
+                with tracer.start_as_current_span(f"execute_tool {name}") as tool_span:
+                    tool_span.set_attribute("gen_ai.operation.name", "execute_tool")
+                    tool_span.set_attribute("gen_ai.tool.name", name)
+                    tool_span.set_attribute(
+                        "gen_ai.tool.call.arguments", tc.function.arguments or "{}"
+                    )
                     tool_span.set_attribute("tool.name", name)
                     tool_span.set_attribute("tool.args", tc.function.arguments or "{}")
                     result = await mcp.call_tool(name, args)
+                    tool_span.set_attribute("gen_ai.tool.call.result", result[:500])
                     tool_span.set_attribute("tool.result", result[:500])
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
         return json.dumps({"status": "failed", "detail": f"step budget ({MAX_STEPS}) exhausted"})

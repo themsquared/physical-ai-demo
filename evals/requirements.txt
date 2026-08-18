@@ -1,0 +1,4 @@
+# agentevals CLI (NOT `agentevals` — that's an unrelated LangChain package).
+# Consumes OTel traces and scores runs without re-executing them.
+agentevals-cli>=0.9.8
+agentevals-evaluator-sdk>=0.9.8

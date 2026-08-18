@@ -63,7 +63,10 @@ verify-speed: $(VENV)
 verify-repeat: $(VENV)
 	bash scripts/verify-repeat.sh
 
-verify-all: verify-m0 verify-m1 verify-failover verify-safety verify-m4 verify-speed verify-repeat
+verify-chaos: $(VENV)
+	$(VENVPY) -m pytest tests/integration/test_chaos.py -q
+
+verify-all: verify-m0 verify-m1 verify-failover verify-safety verify-m4 verify-speed verify-repeat verify-chaos
 
 bench: $(VENV)
 	$(VENVPY) bench/bench.py
