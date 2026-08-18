@@ -63,6 +63,19 @@ services:
     build: { context: ., dockerfile: mock-llm/Dockerfile }
     image: physical-ai-demo/mock-llm:local
     ports: ["8200:8200"]
+    environment:
+      MOCK_MODEL_NAME: mock-llm
+
+  # A second deterministic backend so the failover demo shows a visible,
+  # instant rung transition (edge-sim -> mock-llm) with NO models pulled and
+  # no GPU — reproducible on any laptop / in CI. Replaced by real Ollama when
+  # PRIMARY_BASE_URL points at a pulled model (see .env.example).
+  mock-edge:
+    build: { context: ., dockerfile: mock-llm/Dockerfile }
+    image: physical-ai-demo/mock-llm:local
+    ports: ["8201:8200"]
+    environment:
+      MOCK_MODEL_NAME: edge-sim
 
   ollama-primary:
     image: ollama/ollama:0.11.4

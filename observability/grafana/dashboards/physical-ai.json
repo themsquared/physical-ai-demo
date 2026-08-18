@@ -1,0 +1,95 @@
+{
+  "title": "Physical AI — the five hardware imperatives",
+  "uid": "physical-ai",
+  "editable": true,
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "row",
+      "title": "FAILOVER — which LLM rung is serving",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM requests by backend rung (watch traffic move on failover)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } } },
+      "targets": [
+        {
+          "expr": "sum by (backend) (increase(agentgateway_requests_total{protocol=\"llm\"}[1m]))",
+          "legendFormat": "{{backend}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "SAFETY — governance denials (the flight recorder)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+    },
+    {
+      "type": "stat",
+      "title": "MCP tool-call denials (4xx on /mcp routes)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+      "targets": [
+        {
+          "expr": "sum(increase(agentgateway_requests_total{protocol=\"mcp\", status=~\"4..\"}[5m]))",
+          "legendFormat": "denials"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "MCP requests by route & status",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 10 },
+      "targets": [
+        {
+          "expr": "sum by (route, status) (increase(agentgateway_requests_total{protocol=\"mcp\"}[1m]))",
+          "legendFormat": "{{route}} {{status}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "SPEED — gateway request duration",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }
+    },
+    {
+      "type": "timeseries",
+      "title": "MCP p50/p99 request duration through the gateway (seconds)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 19 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(agentgateway_request_duration_seconds_bucket{protocol=\"mcp\"}[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(agentgateway_request_duration_seconds_bucket{protocol=\"mcp\"}[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "PREDICTABILITY — token usage by identity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }
+    },
+    {
+      "type": "timeseries",
+      "title": "LLM tokens by identity (the per-identity budget lives here)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } } },
+      "targets": [
+        {
+          "expr": "sum by (identity) (increase(agentgateway_gen_ai_client_token_usage_sum[1m]))",
+          "legendFormat": "{{identity}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

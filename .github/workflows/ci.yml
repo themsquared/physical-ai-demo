@@ -27,9 +27,10 @@ jobs:
       - name: Boot CI stack (mock-llm brain, no Ollama)
         run: |
           python scripts/gen-jwts.py gateway/jwt
-          docker compose up -d --build world amr-1 amr-2 arm-1 mock-llm gateway \
+          cp .env.example .env
+          docker compose up -d --build world amr-1 amr-2 arm-1 mock-llm mock-edge gateway \
             orchestrator amr-1-cognition amr-2-cognition arm-1-cognition otel-collector
-          scripts/wait-healthy.sh
+          bash scripts/wait-healthy.sh
       - name: Governance gate (Safety/Predictability)
         run: pytest tests/integration/test_governance.py -q
       - name: Deterministic mission (Repeatability)

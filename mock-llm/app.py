@@ -9,6 +9,7 @@ to demo the failover chain's last rung disappearing too.
 """
 
 import json
+import os
 import re
 import time
 
@@ -16,6 +17,10 @@ from fastapi import FastAPI, Request, Response
 
 app = FastAPI(title="mock-llm")
 OUTAGE = {"fail": False}
+# Reported model id. Two instances with different names (e.g. "edge-llm" and
+# "mock-llm") give the failover demo a visible, instant, reproducible rung
+# transition without needing GPU-class local models pulled.
+MODEL_NAME = os.environ.get("MOCK_MODEL_NAME", "mock-llm")
 
 
 def canned_plan(mission: str) -> dict:
@@ -103,7 +108,7 @@ async def chat(request: Request) -> Response:
                 "id": "mock-completion",
                 "object": "chat.completion",
                 "created": int(time.time()),
-                "model": body.get("model", "mock-llm"),
+                "model": MODEL_NAME,
                 "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
                 "usage": {
                     "prompt_tokens": prompt_tokens,
@@ -123,7 +128,7 @@ async def outage(body: dict) -> dict:
 
 @app.get("/v1/models")
 async def models() -> dict:
-    return {"object": "list", "data": [{"id": "mock-llm", "object": "model"}]}
+    return {"object": "list", "data": [{"id": MODEL_NAME, "object": "model"}]}
 
 
 @app.get("/healthz")

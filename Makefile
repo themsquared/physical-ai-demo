@@ -19,11 +19,17 @@ setup: $(VENV) jwts  ## venv + JWT material
 jwts: $(VENV)
 	$(VENVPY) scripts/gen-jwts.py gateway/jwt
 
-up: jwts            ## full demo stack (includes Ollama; first run pulls models)
-	$(COMPOSE) up -d --build
+up: jwts            ## demo stack, reproducible deterministic brain (no models/GPU)
+	$(COMPOSE) up -d --build world amr-1 amr-2 arm-1 mock-llm mock-edge gateway \
+		orchestrator amr-1-cognition amr-2-cognition arm-1-cognition \
+		otel-collector prometheus grafana
 
-ci-up: jwts         ## CI stack: mock-llm brain only, no Ollama
-	$(COMPOSE) up -d --build world amr-1 amr-2 arm-1 mock-llm gateway \
+up-ollama: jwts     ## add the real Ollama rungs (first run pulls models; slow on Mac CPU)
+	$(COMPOSE) up -d ollama-primary ollama-fallback
+	@echo "set PRIMARY_BASE_URL/FALLBACK_BASE_URL to the ollama rungs in .env, then: make up"
+
+ci-up: jwts         ## CI stack: deterministic brains only, no Ollama
+	$(COMPOSE) up -d --build world amr-1 amr-2 arm-1 mock-llm mock-edge gateway \
 		orchestrator amr-1-cognition amr-2-cognition arm-1-cognition \
 		otel-collector
 

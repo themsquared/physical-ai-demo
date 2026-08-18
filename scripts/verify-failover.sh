@@ -38,12 +38,21 @@ before=$(ask_with_retries)
 [ "$before" = "FAIL" ] && { echo "FAIL: no rung of the chain is serving"; exit 1; }
 echo "serving rung before: $before"
 
-if docker compose ps --status running ollama-primary 2>/dev/null | grep -q ollama-primary; then
-  echo "stopping ollama-primary mid-flight..."
-  docker compose stop ollama-primary >/dev/null
-  KILLED=primary
+# The default reproducible chain's top rung is mock-edge; real-model runs use
+# ollama-primary. Kill whichever is up.
+PRIMARY_RUNG=""
+for cand in ollama-primary mock-edge; do
+  if docker compose ps --status running "$cand" 2>/dev/null | grep -q "$cand"; then
+    PRIMARY_RUNG=$cand; break
+  fi
+done
+
+if [ -n "$PRIMARY_RUNG" ]; then
+  echo "stopping top rung ($PRIMARY_RUNG) mid-flight..."
+  docker compose stop "$PRIMARY_RUNG" >/dev/null
+  KILLED=$PRIMARY_RUNG
 else
-  echo "(ollama-primary not running — CI mode: chain should already sit on a lower rung)"
+  echo "(no top rung running — chain should already sit on a lower rung)"
   KILLED=none
 fi
 
@@ -51,8 +60,8 @@ after=$(ask_with_retries)
 echo "serving rung after:  $after"
 [ "$after" = "FAIL" ] && { echo "FAIL: chain did not fail over"; exit 1; }
 
-if [ "$KILLED" = "primary" ] && [ "$before" = "$after" ]; then
-  echo "FAIL: same rung still serving after primary was stopped"
+if [ "$KILLED" != "none" ] && [ "$before" = "$after" ]; then
+  echo "FAIL: same rung still serving after the top rung was stopped"
   exit 1
 fi
 
@@ -60,8 +69,8 @@ fi
 echo "--- metric evidence (gen_ai token usage by response model) ---"
 curl -s "$METRICS" | grep -E 'gen_ai.*token_usage_count' | grep -oE 'gen_ai_response_model="[^"]*"' | sort | uniq -c || true
 
-if [ "$KILLED" = "primary" ]; then
-  echo "restarting ollama-primary..."
-  docker compose start ollama-primary >/dev/null
+if [ "$KILLED" != "none" ]; then
+  echo "restarting $KILLED..."
+  docker compose start "$KILLED" >/dev/null
 fi
 echo "PASS: failover engaged; no request lost with bounded retries"
