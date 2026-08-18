@@ -51,6 +51,7 @@ verify-failover:
 
 verify-safety: $(VENV)
 	$(VENVPY) -m pytest tests/integration/test_governance.py -q -x
+	bash scripts/verify-budget.sh
 
 verify-m4:
 	bash scripts/run-mission.sh --verify
