@@ -88,5 +88,11 @@ verify-all: verify-m0 verify-m1 verify-failover verify-safety verify-m4 verify-s
 bench: $(VENV)
 	$(VENVPY) bench/bench.py
 
+images:             ## build all service images (native arch)
+	bash scripts/build-images.sh local
+
+images-arm64:       ## cross-build all images for the Jetson (linux/arm64)
+	bash scripts/build-images.sh --arm64
+
 demo:
 	bash demo.sh

@@ -52,8 +52,4 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Build all images for arm64+amd64 (no push on PRs)
-        run: |
-          for svc in world robots agents mock-llm; do
-            docker buildx build --platform linux/amd64,linux/arm64 \
-              -f $svc/Dockerfile . -t physical-ai-demo/$svc:ci
-          done
+        run: bash scripts/build-images.sh --multiarch
