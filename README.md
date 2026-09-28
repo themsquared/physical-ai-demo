@@ -2,6 +2,8 @@
 
 **Solo.io OSS stack as the nervous system for Physical AI.**
 
+> 📖 **Read the write-up:** [Governing an LLM-Driven Robot Fleet with agentgateway](https://webofmike.com/llm-robot-fleet-agentgateway/)
+
 > Hardware doesn't forgive. Safety, failover, speed, repeatability, predictability —
 > in Physical AI these are **connectivity-layer properties**, and the connectivity
 > layer is open source today.
